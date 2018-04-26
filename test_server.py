@@ -875,3 +875,16 @@ class DemoDHCPServerTest(unittest.TestCase):
         answer, to = serv.handle(ISC_WORKS2_REQUEST)
         self.assertEqual(answer, ISC_WORKS2_ACK)
         self.assertEqual(to, ('255.255.255.255', 68))
+
+    def test_toniebox_isc_works(self):
+        pool = demodhcpd.AddressPool([
+            ipaddress.ip_address('10.54.42.100')
+        ])
+        server_ip = ipaddress.ip_address('10.54.42.1')
+        serv = demodhcpd.DHCPServer(
+            server_ip, server_ip, pool, 24,
+            demodhcpd.craft_isc, test_log)
+
+        answer, to = serv.handle(REQUEST_WITHOUT_IP)
+        self.assertEqual(answer, ISC_WORKS_ACK)
+        self.assertEqual(to, ('255.255.255.255', 68))

@@ -362,7 +362,21 @@ class DHCPServer(object):
             return answer, to
         elif dhcp_type == DHCPREQUEST:
             if not requested_ip:
-                raise ValueError('DHCPREQUEST without IP address')
+                answer, to = self.craftfunc(
+                    dhcp_type=DHCPNAK,
+                    transaction_id=transaction_id,
+                    broadcast_flag=broadcast_flag,
+                    offer_ip=ipaddress.ip_address('0.0.0.0'),
+                    mac_addr=mac_addr,
+                    server_ip=self.my_ip,
+                    subnet_len=self.subnet_len,
+                    router_ip=self.my_ip,
+                    packed_dns=packed_dns
+                )
+                self.log(
+                    '< DHCPNAK (no IP address requested) to %s %s' %
+                    (to[0], format_mac(mac_addr)))
+                return answer, to
 
             self.log(
                 '> DHCPREQUEST %s from %s %s%s' % (
