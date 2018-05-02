@@ -394,7 +394,7 @@ class DHCPServer(object):
                     offer_ip=requested_ip,
                     mac_addr=mac_addr,
                     server_ip=self.my_ip,
-                    subnet_len=24,
+                    subnet_len=self.subnet_len,
                     router_ip=self.my_ip,
                     packed_dns=packed_dns
                 )
