@@ -67,8 +67,8 @@ class AddressPool(object):
     def __init__(self, all_addrs):
         assert isinstance(all_addrs, list)
         self.all_addrs = all_addrs
-        self.assignments = {} # ip -> DHCPAssignment
-        self.by_mac = {} # mac -> DHCPAssignment
+        self.assignments = {}  # ip -> DHCPAssignment
+        self.by_mac = {}  # mac -> DHCPAssignment
         self.p = 0
 
     def get_addr(self, mac):
