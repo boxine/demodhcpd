@@ -135,6 +135,19 @@ class DHCPServer(object):
             b'\xff'
         ), ('255.255.255.255' if broadcast_flag else str(offer_ip), 68))
 
+    def craft_offer_ack(self, dhcp_type, transaction_id, broadcast_flag, offer_ip, mac_addr):
+        return self.craftfunc(
+            dhcp_type=dhcp_type,
+            transaction_id=transaction_id,
+            broadcast_flag=broadcast_flag,
+            offer_ip=offer_ip,
+            mac_addr=mac_addr,
+            server_ip=self.my_ip,
+            router_ip=self.my_ip,
+            packed_dns=self.dns_ip.packed,
+            subnet_len=self.subnet_len,
+        )
+
     def handle(self, packet):
         # See RFC 2131 for more details
 
@@ -260,8 +273,6 @@ class DHCPServer(object):
         if dhcp_type is None:
             raise ValueError('DHCP type is missing')
 
-        packed_dns = self.dns_ip.packed
-
         if dhcp_type == DHCPDISCOVER:
             self.log(
                 '> DHCPDISCOVER from %s %s%s' % (
@@ -270,16 +281,12 @@ class DHCPServer(object):
                     ' (params: %s)' % requested_params if requested_params else ''))
             offer_ip = self.pool.get_addr(mac_addr)
 
-            answer, to = self.craftfunc(
+            answer, to = self.craft_offer_ack(
                 dhcp_type=DHCPOFFER,
                 transaction_id=transaction_id,
                 broadcast_flag=broadcast_flag,
                 offer_ip=offer_ip,
-                mac_addr=mac_addr,
-                server_ip=self.my_ip,
-                subnet_len=self.subnet_len,
-                router_ip=self.my_ip,
-                packed_dns=packed_dns
+                mac_addr=mac_addr
             )
             self.log('< DHCPOFFER %s to %s %s' % (offer_ip, to[0], format_mac(mac_addr)))
             return answer, to
@@ -304,30 +311,22 @@ class DHCPServer(object):
             assignment_success = self.pool.assign(
                 requested_ip, mac_addr, requested_hostname)
             if assignment_success:
-                answer, to = self.craftfunc(
+                answer, to = self.craft_offer_ack(
                     dhcp_type=DHCPACK,
                     transaction_id=transaction_id,
                     broadcast_flag=broadcast_flag,
                     offer_ip=requested_ip,
-                    mac_addr=mac_addr,
-                    server_ip=self.my_ip,
-                    subnet_len=self.subnet_len,
-                    router_ip=self.my_ip,
-                    packed_dns=packed_dns
+                    mac_addr=mac_addr
                 )
                 self.log('< DHCPACK %s to %s %s' % (requested_ip, to[0], format_mac(mac_addr)))
                 return answer, to
             else:
-                answer, to = self.craftfunc(
+                answer, to = self.craft_offer_ack(
                     dhcp_type=DHCPNAK,
                     transaction_id=transaction_id,
                     broadcast_flag=broadcast_flag,
                     offer_ip=ipaddress.ip_address('0.0.0.0'),
-                    mac_addr=mac_addr,
-                    server_ip=self.my_ip,
-                    subnet_len=self.subnet_len,
-                    router_ip=self.my_ip,
-                    packed_dns=packed_dns
+                    mac_addr=mac_addr
                 )
                 self.log(
                     '< DHCPNAK (do not take %s) to %s %s' %
