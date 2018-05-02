@@ -45,7 +45,7 @@ def make_bytes(b):
 
 MAGIC_COOKIE = b'\x63\x82\x53\x63'
 
-DHCPAssignment = collections.namedtuple('DHCPAssignment', ['mac', 'hostname'])
+DHCPAssignment = collections.namedtuple('DHCPAssignment', ['mac', 'hostname', 'ip'])
 
 
 def format_mac(mac_addr):
@@ -59,21 +59,32 @@ def ip_range(start, end):
         cur = cur + 1
 
 
+class NoAddressAvailable(Exception):
+    pass
+
+
 class AddressPool(object):
     def __init__(self, all_addrs):
         assert isinstance(all_addrs, list)
         self.all_addrs = all_addrs
-        self.assignments = {}
+        self.assignments = {} # ip -> DHCPAssignment
+        self.by_mac = {} # mac -> DHCPAssignment
         self.p = 0
 
-    def get_addr(self):
+    def get_addr(self, mac):
+        prev = self.by_mac.get(mac)
+        if prev:
+            return prev.ip
+
         tries = 0
         n = len(self.all_addrs)
         while tries < n:
             if self.all_addrs[self.p] in self.assignments:
                 self.p = (self.p + 1) % n
+                tries += 1
             else:
                 return self.all_addrs[self.p]
+        raise NoAddressAvailable()
 
     def assign(self, addr, mac, hostname):
         """ Returns True iff the address could be assigned """
@@ -85,8 +96,10 @@ class AddressPool(object):
         if cur is not None and cur.mac != mac:
             return False  # already assigned
 
-        ass = DHCPAssignment(mac, hostname)
+        ass = DHCPAssignment(mac, hostname, addr)
         self.assignments[addr] = ass
+        self.by_mac[mac] = ass
+
         return True
 
 
@@ -255,7 +268,7 @@ class DHCPServer(object):
                     requested_hostname or '',
                     format_mac(mac_addr),
                     ' (params: %s)' % requested_params if requested_params else ''))
-            offer_ip = self.pool.get_addr()
+            offer_ip = self.pool.get_addr(mac_addr)
 
             answer, to = self.craftfunc(
                 dhcp_type=DHCPOFFER,
