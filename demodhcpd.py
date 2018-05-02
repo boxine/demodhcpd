@@ -59,119 +59,6 @@ def ip_range(start, end):
         cur = cur + 1
 
 
-def craft_udhcpd_broken(
-        dhcp_type,
-        transaction_id, broadcast_flag, offer_ip, mac_addr,
-        server_ip, subnet_len, router_ip, packed_dns):
-
-    assert len(mac_addr) == 6
-    packed_subnet_mask = struct.pack(
-        '!I', int(ipaddress.ip_address(offer_ip.packed)) | (0xffffffff >> subnet_len))
-    packed_lease_time = b'\x00\x01\x51\x80'  # 1 day
-
-    return ((
-        b'\x02' +      # BOOTREPLY
-        b'\x01\x06' +  # Ethernet (6 bytes addresses)
-        b'\x00' +      # hops
-        transaction_id +
-        b'\x00\x00' +  # secs
-        b'\x80\x00' +  # broadcast flag and 15 empty bits: always set with udhcpd
-        b'\0\0\0\0' +  # ciaddr (not applicable)
-        offer_ip.packed +  # yiaddr
-        b'\0\0\0\0' +  # siaddr
-        b'\0\0\0\0' +  # giaddr
-        mac_addr + (b'\0' * 10) +  # chaddr + padding
-        (b'\0' * 64) +   # sname
-        (b'\0' * 128) +  # file
-        MAGIC_COOKIE +
-        b'\x35\x01' + struct.pack('!B', dhcp_type) +  # DHCP Message Type
-        b'\x36\x04' + server_ip.packed +    # DHCP Server Identifier
-        b'\x33\x04' + packed_lease_time +   # DHCP Lease Time: 1 day (hardcoded)
-        b'\x01\x04' + packed_subnet_mask +  # Subnet Mask
-        b'\x03\x04' + router_ip.packed +    # Router
-        b'\x06\x04' + packed_dns +          # DNS Server
-        b'\xff' +      # End
-        (b'\0' * 26)   # Padding - udhcp does this (completely useless)
-    ), ('255.255.255.255', 68))
-
-
-def craft_udhcpd(
-        dhcp_type,
-        transaction_id, broadcast_flag, offer_ip, mac_addr,
-        server_ip, subnet_len, router_ip, packed_dns):
-
-    assert len(mac_addr) == 6
-    packed_subnet_mask = struct.pack('!I', (0xffffffff << (32 - subnet_len)) & 0xffffffff)
-    packed_lease_time = b'\x00\x01\x51\x80'
-
-    return ((
-        b'\x02' +      # BOOTREPLY
-        b'\x01\x06' +  # Ethernet (6 bytes addresses)
-        b'\x00' +      # hops
-        transaction_id +
-        b'\x00\x00' +  # secs
-        b'\x80\x00' +  # broadcast flag and 15 empty bits: always set with udhcpd
-        b'\0\0\0\0' +  # ciaddr (not applicable)
-        offer_ip.packed +  # yiaddr
-        b'\0\0\0\0' +  # siaddr
-        b'\0\0\0\0' +  # giaddr
-        mac_addr + (b'\0' * 10) +  # chaddr + padding
-        (b'\0' * 64) +   # sname
-        (b'\0' * 128) +  # file
-        MAGIC_COOKIE +
-        b'\x35\x01' + struct.pack('!B', dhcp_type) +  # DHCP Message Type
-        b'\x36\x04' + server_ip.packed +    # DHCP Server Identifier
-        b'\x33\x04' + packed_lease_time +   # DHCP Lease Time: 1 day (hardcoded)
-        b'\x01\x04' + packed_subnet_mask +  # Subnet Mask
-        b'\x03\x04' + router_ip.packed +    # Router
-        b'\x06\x04' + packed_dns +          # DNS Server
-        b'\xff' +      # End
-        (b'\0' * 26)   # Padding - udhcp does this (completely useless)
-    ), ('255.255.255.255', 68))
-
-
-def craft_isc(
-        dhcp_type,
-        transaction_id, broadcast_flag, offer_ip, mac_addr,
-        server_ip, subnet_len, router_ip, packed_dns):
-
-    assert len(mac_addr) == 6
-    packed_subnet_mask = struct.pack('!I', (0xffffffff << (32 - subnet_len)) & 0xffffffff)
-    packed_lease_time = b'\x00\x00\x1c\x20' if dhcp_type == DHCPOFFER else b'\x00\x00\x02\x58'
-
-    return ((
-        b'\x02' +      # BOOTREPLY
-        b'\x01\x06' +  # Ethernet (6 bytes addresses)
-        b'\x00' +      # hops
-        transaction_id +
-        b'\x00\x00' +  # secs
-        (b'\x80\x00' if broadcast_flag else b'\x00\x00') +  # broadcast flag
-        b'\0\0\0\0' +  # ciaddr (not applicable)
-        offer_ip.packed +  # yiaddr
-        b'\0\0\0\0' +  # siaddr
-        b'\0\0\0\0' +  # giaddr
-        mac_addr + (b'\0' * 10) +  # chaddr + padding
-        (b'\0' * 64) +   # sname
-        (b'\0' * 128) +  # file
-        MAGIC_COOKIE +
-        b'\x35\x01' + struct.pack('!B', dhcp_type) +  # DHCP Message Type
-        b'\x36\x04' + server_ip.packed +    # DHCP Server Identifier
-        b'\x33\x04' + packed_lease_time +   # DHCP Lease Time
-        b'\x01\x04' + packed_subnet_mask +  # Subnet Mask
-        b'\x03\x04' + router_ip.packed +       # Router
-        b'\x06\x04' + packed_dns +          # DNS Server
-        b'\xff' +      # End
-        (b'\0' * 26)   # Padding - isc does this (completely useless)
-    ), ('255.255.255.255' if broadcast_flag else str(offer_ip), 68))
-
-
-CRAFT_FUNCS = {
-    'udhcpd_broken': craft_udhcpd_broken,
-    'udhcpd': craft_udhcpd,
-    'isc': craft_isc,
-}
-
-
 class AddressPool(object):
     def __init__(self, all_addrs):
         assert isinstance(all_addrs, list)
@@ -211,6 +98,29 @@ class DHCPServer(object):
         self.craftfunc = craftfunc
         self.log = log
         self.subnet_len = subnet_len
+
+    def craft_nak(self, transaction_id, broadcast_flag, mac_addr):
+        assert len(mac_addr) == 6
+
+        return ((
+            b'\x02' +      # BOOTREPLY
+            b'\x01\x06' +  # Ethernet (6 bytes addresses)
+            b'\x00' +      # hops
+            transaction_id +
+            b'\x00\x00' +  # secs
+            (b'\x80\x00' if broadcast_flag else b'\x00\x00') +  # broadcast flag
+            b'\0\0\0\0' +  # ciaddr (not applicable)
+            b'\0\0\0\0' +  # yiaddr: none (this is a NAK)
+            b'\0\0\0\0' +  # siaddr
+            b'\0\0\0\0' +  # giaddr
+            mac_addr + (b'\0' * 10) +  # chaddr + padding
+            (b'\0' * 64) +   # sname
+            (b'\0' * 128) +  # file
+            MAGIC_COOKIE +
+            b'\x35\x01' + struct.pack('!B', DHCPNAK) +  # DHCP Message type: NAK
+            b'\x36\x04' + self.my_ip.packed +    # DHCP Server Identifier
+            b'\xff'
+        ), ('255.255.255.255' if broadcast_flag else str(offer_ip), 68))
 
     def handle(self, packet):
         # See RFC 2131 for more details
@@ -362,16 +272,10 @@ class DHCPServer(object):
             return answer, to
         elif dhcp_type == DHCPREQUEST:
             if not requested_ip:
-                answer, to = self.craftfunc(
-                    dhcp_type=DHCPNAK,
+                answer, to = self.craft_nak(
                     transaction_id=transaction_id,
                     broadcast_flag=broadcast_flag,
-                    offer_ip=ipaddress.ip_address('0.0.0.0'),
-                    mac_addr=mac_addr,
-                    server_ip=self.my_ip,
-                    subnet_len=self.subnet_len,
-                    router_ip=self.my_ip,
-                    packed_dns=packed_dns
+                    mac_addr=mac_addr
                 )
                 self.log(
                     '< DHCPNAK (no IP address requested) to %s %s' %
@@ -437,6 +341,119 @@ def elevate():
             '--no-elevation'
         ])
     assert False, 'never reached'
+
+
+def craft_udhcpd_broken(
+        dhcp_type,
+        transaction_id, broadcast_flag, offer_ip, mac_addr,
+        server_ip, subnet_len, router_ip, packed_dns):
+
+    assert len(mac_addr) == 6
+    packed_subnet_mask = struct.pack(
+        '!I', int(ipaddress.ip_address(offer_ip.packed)) | (0xffffffff >> subnet_len))
+    packed_lease_time = b'\x00\x01\x51\x80'  # 1 day
+
+    return ((
+        b'\x02' +      # BOOTREPLY
+        b'\x01\x06' +  # Ethernet (6 bytes addresses)
+        b'\x00' +      # hops
+        transaction_id +
+        b'\x00\x00' +  # secs
+        b'\x80\x00' +  # broadcast flag and 15 empty bits: always set with udhcpd
+        b'\0\0\0\0' +  # ciaddr (not applicable)
+        offer_ip.packed +  # yiaddr
+        b'\0\0\0\0' +  # siaddr
+        b'\0\0\0\0' +  # giaddr
+        mac_addr + (b'\0' * 10) +  # chaddr + padding
+        (b'\0' * 64) +   # sname
+        (b'\0' * 128) +  # file
+        MAGIC_COOKIE +
+        b'\x35\x01' + struct.pack('!B', dhcp_type) +  # DHCP Message Type
+        b'\x36\x04' + server_ip.packed +    # DHCP Server Identifier
+        b'\x33\x04' + packed_lease_time +   # DHCP Lease Time: 1 day (hardcoded)
+        b'\x01\x04' + packed_subnet_mask +  # Subnet Mask
+        b'\x03\x04' + router_ip.packed +    # Router
+        b'\x06\x04' + packed_dns +          # DNS Server
+        b'\xff' +      # End
+        (b'\0' * 26)   # Padding - udhcp does this (completely useless)
+    ), ('255.255.255.255', 68))
+
+
+def craft_udhcpd(
+        dhcp_type,
+        transaction_id, broadcast_flag, offer_ip, mac_addr,
+        server_ip, subnet_len, router_ip, packed_dns):
+
+    assert len(mac_addr) == 6
+    packed_subnet_mask = struct.pack('!I', (0xffffffff << (32 - subnet_len)) & 0xffffffff)
+    packed_lease_time = b'\x00\x01\x51\x80'
+
+    return ((
+        b'\x02' +      # BOOTREPLY
+        b'\x01\x06' +  # Ethernet (6 bytes addresses)
+        b'\x00' +      # hops
+        transaction_id +
+        b'\x00\x00' +  # secs
+        b'\x80\x00' +  # broadcast flag and 15 empty bits: always set with udhcpd
+        b'\0\0\0\0' +  # ciaddr (not applicable)
+        offer_ip.packed +  # yiaddr
+        b'\0\0\0\0' +  # siaddr
+        b'\0\0\0\0' +  # giaddr
+        mac_addr + (b'\0' * 10) +  # chaddr + padding
+        (b'\0' * 64) +   # sname
+        (b'\0' * 128) +  # file
+        MAGIC_COOKIE +
+        b'\x35\x01' + struct.pack('!B', dhcp_type) +  # DHCP Message Type
+        b'\x36\x04' + server_ip.packed +    # DHCP Server Identifier
+        b'\x33\x04' + packed_lease_time +   # DHCP Lease Time: 1 day (hardcoded)
+        b'\x01\x04' + packed_subnet_mask +  # Subnet Mask
+        b'\x03\x04' + router_ip.packed +    # Router
+        b'\x06\x04' + packed_dns +          # DNS Server
+        b'\xff' +      # End
+        (b'\0' * 26)   # Padding - udhcp does this (completely useless)
+    ), ('255.255.255.255', 68))
+
+
+def craft_isc(
+        dhcp_type,
+        transaction_id, broadcast_flag, offer_ip, mac_addr,
+        server_ip, subnet_len, router_ip, packed_dns):
+
+    assert len(mac_addr) == 6
+    packed_subnet_mask = struct.pack('!I', (0xffffffff << (32 - subnet_len)) & 0xffffffff)
+    packed_lease_time = b'\x00\x00\x1c\x20' if dhcp_type == DHCPOFFER else b'\x00\x00\x02\x58'
+
+    return ((
+        b'\x02' +      # BOOTREPLY
+        b'\x01\x06' +  # Ethernet (6 bytes addresses)
+        b'\x00' +      # hops
+        transaction_id +
+        b'\x00\x00' +  # secs
+        (b'\x80\x00' if broadcast_flag else b'\x00\x00') +  # broadcast flag
+        b'\0\0\0\0' +  # ciaddr (not applicable)
+        offer_ip.packed +  # yiaddr
+        b'\0\0\0\0' +  # siaddr
+        b'\0\0\0\0' +  # giaddr
+        mac_addr + (b'\0' * 10) +  # chaddr + padding
+        (b'\0' * 64) +   # sname
+        (b'\0' * 128) +  # file
+        MAGIC_COOKIE +
+        b'\x35\x01' + struct.pack('!B', dhcp_type) +  # DHCP Message Type
+        b'\x36\x04' + server_ip.packed +    # DHCP Server Identifier
+        b'\x33\x04' + packed_lease_time +   # DHCP Lease Time
+        b'\x01\x04' + packed_subnet_mask +  # Subnet Mask
+        b'\x03\x04' + router_ip.packed +       # Router
+        b'\x06\x04' + packed_dns +          # DNS Server
+        b'\xff' +      # End
+        (b'\0' * 26)   # Padding - isc does this (completely useless)
+    ), ('255.255.255.255' if broadcast_flag else str(offer_ip), 68))
+
+
+CRAFT_FUNCS = {
+    'udhcpd_broken': craft_udhcpd_broken,
+    'udhcpd': craft_udhcpd,
+    'isc': craft_isc,
+}
 
 
 def main():
