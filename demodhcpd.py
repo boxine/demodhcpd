@@ -127,7 +127,7 @@ class DHCPServer(object):
             b'\x00' +      # hops
             transaction_id +
             b'\x00\x00' +  # secs
-            (b'\x80\x00' if broadcast_flag else b'\x00\x00') +  # broadcast flag
+            b'\x00\x00' +  # broadcast flag: always 0 because this guy does not have an IP address!
             b'\0\0\0\0' +  # ciaddr (not applicable)
             b'\0\0\0\0' +  # yiaddr: none (this is a NAK)
             b'\0\0\0\0' +  # siaddr
@@ -139,7 +139,7 @@ class DHCPServer(object):
             b'\x35\x01' + struct.pack('!B', DHCPNAK) +  # DHCP Message type: NAK
             b'\x36\x04' + self.my_ip.packed +    # DHCP Server Identifier
             b'\xff'
-        ), ('255.255.255.255' if broadcast_flag else str(offer_ip), 68))
+        ), ('255.255.255.255', 68))
 
     def craft_offer_ack(self, dhcp_type, transaction_id, broadcast_flag, offer_ip, mac_addr):
         return self.craftfunc(
