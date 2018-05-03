@@ -7,6 +7,8 @@ python:
   - "pypy"
   - "pypy3"
 sudo: false
+install:
+  - pip install flake8
 script:
   - make test
   - make lint
