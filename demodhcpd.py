@@ -33,6 +33,12 @@ except AttributeError:  # Python 2
     SO_BINDTODEVICE = 25
 
 
+try:
+    PermissionError
+except NameError:  # Python2, just catch any socket errors
+    PermissionError = socket.error
+
+
 def make_bytes(b):
     if sys.version_info[0] < 3:
         return bytearray(b)
