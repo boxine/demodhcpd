@@ -59,6 +59,7 @@ def format_mac(mac_addr):
 
 
 def ip_range(start, end):
+    assert start <= end
     cur = start
     while cur <= end:
         yield cur
