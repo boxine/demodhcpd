@@ -340,7 +340,8 @@ class DHCPServer(object):
                     (requested_ip, to[0], format_mac(mac_addr)))
                 return answer, to
         else:
-            raise ValueError('Unsupported DHCP message type %d' % dhcp_type)
+            self.log('Unsupported DHCP message type %d' % dhcp_type)
+            return
 
     def serve(self, sock):
         while True:
