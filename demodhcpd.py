@@ -490,7 +490,7 @@ def main():
         default='1.1.1.1',
         help='IP of the DNS server (default: %(default)s)')
     parser.add_argument(
-        '--ip-range', metavar='STARTIP-ENDIP',
+        '-r', '--ip-range', metavar='STARTIP-ENDIP',
         default='10.54.42.10-10.54.42.250',
         help='Range of IP addresses to give out (default: %(default)s)'
     )
