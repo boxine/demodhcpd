@@ -258,7 +258,7 @@ class DHCPServer(object):
             elif code == 57:  # Maximum DHCP message size
                 assert olen == 2
                 max_size = struct.unpack('!H', odata)[0]
-                assert max_size >= 576
+                assert max_size >= 548
             elif code == 60:  # vendor class identifier
                 assert olen >= 1
                 # we don't care, seems Android-specific
